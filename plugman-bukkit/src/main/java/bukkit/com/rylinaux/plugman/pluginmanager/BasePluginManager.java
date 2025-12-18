@@ -38,6 +38,7 @@ import org.bukkit.Bukkit;
 import org.bukkit.command.PluginCommand;
 import org.bukkit.command.SimpleCommandMap;
 import org.bukkit.event.Event;
+import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.plugin.RegisteredListener;
 import org.jetbrains.annotations.ApiStatus;
 
@@ -64,6 +65,64 @@ public abstract class BasePluginManager implements PluginManager {
         if (!PlugManAPI.getGentleUnloads().containsKey(bukkitPlugin)) return true;
         var gentleUnload = PlugManAPI.getGentleUnloads().get(bukkitPlugin);
         return gentleUnload.askingForGentleUnload();
+    }
+
+    /**
+     * Closes all custom (non-vanilla) inventory views.
+     * This should be called before disabling a plugin to prevent issues with open menus.
+     *
+     * @param plugin the plugin being unloaded (unused, closes all custom inventories)
+     */
+    protected void closePluginInventories(Plugin plugin) {
+        for (var player : Bukkit.getOnlinePlayers()) {
+            var openInventory = player.getOpenInventory();
+            if (openInventory == null) continue;
+
+            var topInventory = openInventory.getTopInventory();
+            if (topInventory == null) continue;
+
+            // Close if it's a custom GUI (not a vanilla block inventory)
+            if (isCustomInventory(topInventory)) {
+                player.closeInventory();
+            }
+        }
+    }
+
+    /**
+     * Checks if an inventory is a custom GUI (not a vanilla block-based inventory).
+     */
+    private boolean isCustomInventory(org.bukkit.inventory.Inventory inventory) {
+        var holder = inventory.getHolder();
+
+        // Null holder typically means a custom GUI created with Bukkit.createInventory(null, ...)
+        if (holder == null) {
+            return true;
+        }
+
+        // Check if holder is a vanilla block type - these are real world containers, not GUIs
+        if (holder instanceof org.bukkit.block.Container) {
+            return false; // Chest, Furnace, Dispenser, Hopper, etc.
+        }
+        if (holder instanceof org.bukkit.block.DoubleChest) {
+            return false; // Double chest
+        }
+        if (holder instanceof org.bukkit.entity.Entity) {
+            return false; // Horse inventory, villager trading, etc.
+        }
+
+        // Player holder with CRAFTING type is the player's own inventory
+        if (holder instanceof org.bukkit.entity.Player) {
+            var type = inventory.getType();
+            if (type == org.bukkit.event.inventory.InventoryType.CRAFTING ||
+                type == org.bukkit.event.inventory.InventoryType.PLAYER) {
+                return false;
+            }
+            // Player holder with CHEST type is likely a custom GUI
+            return true;
+        }
+
+        // Any other holder is a custom GUI
+        return true;
     }
 
     /**
