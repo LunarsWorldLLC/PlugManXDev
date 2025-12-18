@@ -68,15 +68,12 @@ public abstract class BasePluginManager implements PluginManager {
     }
 
     /**
-     * Closes all inventory views that belong to the specified plugin.
+     * Closes all custom (non-vanilla) inventory views.
      * This should be called before disabling a plugin to prevent issues with open menus.
      *
-     * @param plugin the plugin whose inventories should be closed
+     * @param plugin the plugin being unloaded (unused, closes all custom inventories)
      */
     protected void closePluginInventories(Plugin plugin) {
-        var bukkitPlugin = plugin.<org.bukkit.plugin.Plugin>getHandle();
-        var pluginClassLoader = bukkitPlugin.getClass().getClassLoader();
-
         for (var player : Bukkit.getOnlinePlayers()) {
             var openInventory = player.getOpenInventory();
             if (openInventory == null) continue;
@@ -84,68 +81,48 @@ public abstract class BasePluginManager implements PluginManager {
             var topInventory = openInventory.getTopInventory();
             if (topInventory == null) continue;
 
-            var holder = topInventory.getHolder();
-
-            // Check if the inventory holder belongs to the plugin being unloaded
-            if (isHolderFromPlugin(holder, bukkitPlugin, pluginClassLoader)) {
+            // Close if it's a custom GUI (not a vanilla block inventory)
+            if (isCustomInventory(topInventory)) {
                 player.closeInventory();
             }
         }
     }
 
     /**
-     * Checks if an inventory holder belongs to the specified plugin.
+     * Checks if an inventory is a custom GUI (not a vanilla block-based inventory).
      */
-    private boolean isHolderFromPlugin(InventoryHolder holder, org.bukkit.plugin.Plugin plugin, ClassLoader pluginClassLoader) {
-        // If holder is null, we can't determine ownership
+    private boolean isCustomInventory(org.bukkit.inventory.Inventory inventory) {
+        var holder = inventory.getHolder();
+
+        // Null holder typically means a custom GUI created with Bukkit.createInventory(null, ...)
         if (holder == null) {
-            return false;
-        }
-
-        // Check if the holder is the plugin itself
-        if (holder == plugin) {
             return true;
         }
 
-        var holderClass = holder.getClass();
+        // Check if holder is a vanilla block type - these are real world containers, not GUIs
+        if (holder instanceof org.bukkit.block.Container) {
+            return false; // Chest, Furnace, Dispenser, Hopper, etc.
+        }
+        if (holder instanceof org.bukkit.block.DoubleChest) {
+            return false; // Double chest
+        }
+        if (holder instanceof org.bukkit.entity.Entity) {
+            return false; // Horse inventory, villager trading, etc.
+        }
 
-        // Check if the holder's class was loaded by the plugin's class loader
-        if (holderClass.getClassLoader() == pluginClassLoader) {
+        // Player holder with CRAFTING type is the player's own inventory
+        if (holder instanceof org.bukkit.entity.Player) {
+            var type = inventory.getType();
+            if (type == org.bukkit.event.inventory.InventoryType.CRAFTING ||
+                type == org.bukkit.event.inventory.InventoryType.PLAYER) {
+                return false;
+            }
+            // Player holder with CHEST type is likely a custom GUI
             return true;
         }
 
-        // Check enclosing classes (for inner/anonymous classes)
-        var enclosingClass = holderClass.getEnclosingClass();
-        while (enclosingClass != null) {
-            if (enclosingClass.getClassLoader() == pluginClassLoader) {
-                return true;
-            }
-            enclosingClass = enclosingClass.getEnclosingClass();
-        }
-
-        // Check declaring class
-        var declaringClass = holderClass.getDeclaringClass();
-        if (declaringClass != null && declaringClass.getClassLoader() == pluginClassLoader) {
-            return true;
-        }
-
-        // Check all interfaces
-        for (var iface : holderClass.getInterfaces()) {
-            if (iface.getClassLoader() == pluginClassLoader) {
-                return true;
-            }
-        }
-
-        // Check superclasses
-        var superClass = holderClass.getSuperclass();
-        while (superClass != null && superClass != Object.class) {
-            if (superClass.getClassLoader() == pluginClassLoader) {
-                return true;
-            }
-            superClass = superClass.getSuperclass();
-        }
-
-        return false;
+        // Any other holder is a custom GUI
+        return true;
     }
 
     /**
