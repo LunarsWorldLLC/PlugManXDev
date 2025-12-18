@@ -38,6 +38,7 @@ import org.bukkit.Bukkit;
 import org.bukkit.command.PluginCommand;
 import org.bukkit.command.SimpleCommandMap;
 import org.bukkit.event.Event;
+import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.plugin.RegisteredListener;
 import org.jetbrains.annotations.ApiStatus;
 
@@ -64,6 +65,51 @@ public abstract class BasePluginManager implements PluginManager {
         if (!PlugManAPI.getGentleUnloads().containsKey(bukkitPlugin)) return true;
         var gentleUnload = PlugManAPI.getGentleUnloads().get(bukkitPlugin);
         return gentleUnload.askingForGentleUnload();
+    }
+
+    /**
+     * Closes all inventory views that belong to the specified plugin.
+     * This should be called before disabling a plugin to prevent issues with open menus.
+     *
+     * @param plugin the plugin whose inventories should be closed
+     */
+    protected void closePluginInventories(Plugin plugin) {
+        var bukkitPlugin = plugin.<org.bukkit.plugin.Plugin>getHandle();
+        var pluginClassLoader = bukkitPlugin.getClass().getClassLoader();
+
+        for (var player : Bukkit.getOnlinePlayers()) {
+            var openInventory = player.getOpenInventory();
+            if (openInventory == null) continue;
+
+            var topInventory = openInventory.getTopInventory();
+            if (topInventory == null) continue;
+
+            var holder = topInventory.getHolder();
+            if (holder == null) continue;
+
+            // Check if the inventory holder belongs to the plugin being unloaded
+            if (isHolderFromPlugin(holder, bukkitPlugin, pluginClassLoader)) {
+                player.closeInventory();
+            }
+        }
+    }
+
+    /**
+     * Checks if an inventory holder belongs to the specified plugin.
+     */
+    private boolean isHolderFromPlugin(InventoryHolder holder, org.bukkit.plugin.Plugin plugin, ClassLoader pluginClassLoader) {
+        // Check if the holder's class was loaded by the plugin's class loader
+        var holderClassLoader = holder.getClass().getClassLoader();
+        if (holderClassLoader == pluginClassLoader) {
+            return true;
+        }
+
+        // Check if the holder is the plugin itself
+        if (holder == plugin) {
+            return true;
+        }
+
+        return false;
     }
 
     /**

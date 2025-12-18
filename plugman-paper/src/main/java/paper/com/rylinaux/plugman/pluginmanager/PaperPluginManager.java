@@ -231,6 +231,9 @@ public class PaperPluginManager extends BasePluginManager {
     public Tuple<CommonUnloadData, PluginResult> unloadWithPaper(Plugin plugin) {
         if (!handleGentleUnload(plugin)) return new Tuple<>(null, new PluginResult(false, "unload.gentle-failed"));
 
+        // Close all inventory views belonging to this plugin before unloading
+        closePluginInventories(plugin);
+
         var unloadData = extractPluginManagerData(plugin);
         if (unloadData == null) return new Tuple<>(null, new PluginResult(false, "unload.failed"));
 

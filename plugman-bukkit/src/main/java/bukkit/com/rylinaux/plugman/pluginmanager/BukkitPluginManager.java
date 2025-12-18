@@ -409,7 +409,8 @@ public class BukkitPluginManager extends BasePluginManager {
     public synchronized PluginResult unload(Plugin plugin) {
         if (!handleGentleUnload(plugin)) return new PluginResult(false, "unload.gentle-failed");
 
-        //syncCommands();
+        // Close all inventory views belonging to this plugin before unloading
+        closePluginInventories(plugin);
 
         var unloadData = extractPluginManagerData(plugin);
         if (unloadData == null) return new PluginResult(false, "unload.failed");
