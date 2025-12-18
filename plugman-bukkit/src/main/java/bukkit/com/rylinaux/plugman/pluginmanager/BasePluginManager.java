@@ -85,7 +85,6 @@ public abstract class BasePluginManager implements PluginManager {
             if (topInventory == null) continue;
 
             var holder = topInventory.getHolder();
-            if (holder == null) continue;
 
             // Check if the inventory holder belongs to the plugin being unloaded
             if (isHolderFromPlugin(holder, bukkitPlugin, pluginClassLoader)) {
@@ -98,15 +97,52 @@ public abstract class BasePluginManager implements PluginManager {
      * Checks if an inventory holder belongs to the specified plugin.
      */
     private boolean isHolderFromPlugin(InventoryHolder holder, org.bukkit.plugin.Plugin plugin, ClassLoader pluginClassLoader) {
-        // Check if the holder's class was loaded by the plugin's class loader
-        var holderClassLoader = holder.getClass().getClassLoader();
-        if (holderClassLoader == pluginClassLoader) {
-            return true;
+        // If holder is null, we can't determine ownership
+        if (holder == null) {
+            return false;
         }
 
         // Check if the holder is the plugin itself
         if (holder == plugin) {
             return true;
+        }
+
+        var holderClass = holder.getClass();
+
+        // Check if the holder's class was loaded by the plugin's class loader
+        if (holderClass.getClassLoader() == pluginClassLoader) {
+            return true;
+        }
+
+        // Check enclosing classes (for inner/anonymous classes)
+        var enclosingClass = holderClass.getEnclosingClass();
+        while (enclosingClass != null) {
+            if (enclosingClass.getClassLoader() == pluginClassLoader) {
+                return true;
+            }
+            enclosingClass = enclosingClass.getEnclosingClass();
+        }
+
+        // Check declaring class
+        var declaringClass = holderClass.getDeclaringClass();
+        if (declaringClass != null && declaringClass.getClassLoader() == pluginClassLoader) {
+            return true;
+        }
+
+        // Check all interfaces
+        for (var iface : holderClass.getInterfaces()) {
+            if (iface.getClassLoader() == pluginClassLoader) {
+                return true;
+            }
+        }
+
+        // Check superclasses
+        var superClass = holderClass.getSuperclass();
+        while (superClass != null && superClass != Object.class) {
+            if (superClass.getClassLoader() == pluginClassLoader) {
+                return true;
+            }
+            superClass = superClass.getSuperclass();
         }
 
         return false;
